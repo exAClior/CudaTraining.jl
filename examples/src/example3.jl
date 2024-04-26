@@ -89,3 +89,92 @@ CUDA.@bprofile rmse(A,B)
 
 # Use Nsight system
 # CUDA.@profile macro,passing external=true;
+
+# NVTX: NVIDIA Tools Extensions
+# you may install it those on mac and use it to profile your code running on a server
+
+
+
+
+N = 16 
+A = CUDA.rand(2048,2048,N)
+B = CUDA.rand(2048,2048,N)
+
+using NVTX
+NVTX.@annotate function rmse(A,B)
+    bc = Base.broadcasted(A,B) do a,b
+        (a - b)^2
+    end
+    bc = Broadcast.instantiate(bc)
+    sqrt(sum(bc) / length(A))
+
+
+end
+
+NVTX.@annotate function doit()
+    rmses = Vector{eltype(A)}(undef, N)
+    for i in 1:N
+        rmses[i] = rmse(A[:,:,i], B[:,:,i])
+    end
+    rmses
+end
+
+@benchmark doit()
+
+CUDA.@profile external=true (doit(); doit());
+
+
+NVTX.@annotate function doit()
+    rmses = Vector{eltype(A)}(undef, N)
+    for i in 1:N
+        rmses[i] = @views rmse(A[:,:,i], B[:,:,i])
+    end
+    rmses
+end
+
+CUDA.@profile  (doit(); doit());
+
+
+# avoids synchronization by reducing 
+
+NVTX.@annotate function rmse(A,B)
+    bc = Base.broadcasted(A,B) do a, b
+        (a - b)^2
+    end
+    bc = Broadcast.instantiate(bc)
+    sqrt.(sum(bc; dims=(1,2)) ./ length(A))
+end
+
+NVTX.@annotate function doit()
+    rmses = Vector(undef, N)
+    for i in 1:N
+        rmses[i] = @views rmse(A[:,:,i], B[:,:,i])
+    end
+    vcat(Array.(rmses)...)
+end
+
+@benchmark doit()
+
+CUDA.@profile external=false (doit();doit());
+
+NVTX.@annotate function rmse!(C,A,B)
+    bc = Base.broadcasted(A,B) do a,b
+        (a - b)^2
+    end
+    bc = Broadcast.instantiate(bc)
+    Base.mapreducedim!(identity, + , C, bc)
+    C .= sqrt.(C ./ length(A))
+    return
+end
+
+CUDA.allowscalar(true)
+NVTX.@annotate function doit()
+    rmses = similar(A,N)
+    fill!(rmses, zero(eltype(A)))
+    for i in 1:N
+        @views rmse!(reshape(rmses[i],1,1), A[:,:,i], B[:,:,i])
+    end
+    Array(rmses)
+end
+
+doit()

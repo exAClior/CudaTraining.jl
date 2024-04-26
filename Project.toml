@@ -3,6 +3,9 @@ uuid = "c3d21649-7f41-487e-830e-42835c547d83"
 authors = ["Yusheng Zhao <yushengzhao2020@outlook.com> and contributors"]
 version = "1.0.0-DEV"
 
+[deps]
+CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+
 [compat]
 julia = "1.6.7"
 
